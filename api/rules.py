@@ -29,7 +29,7 @@ def is_allowed_transition(current: str, new: str) -> bool:
     if current == new:
         return True
     if new == "closed":
-        return current in CLOSABLE_FROM
+        return True
     if current == "closed":
         return new == "rework"
     return True
