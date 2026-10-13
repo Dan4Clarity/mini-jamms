@@ -7,6 +7,20 @@ from pydantic import BaseModel, ConfigDict, Field
 # Must match the reports_problem_type_chk CHECK constraint.
 ProblemType = Literal["pothole", "damaged_fence", "signage", "lighting", "other"]
 
+# Must match the codes seeded in public.report_statuses. Keep in step with
+# STATUSES in rules.py.
+ReportStatus = Literal[
+    "open",
+    "pending",
+    "scheduled",
+    "released",
+    "in_progress",
+    "rework",
+    "rework_completed",
+    "completed",
+    "closed",
+]
+
 
 class ReportCreate(BaseModel):
     """What a member of the public sends to create a report."""
@@ -21,6 +35,15 @@ class ReportCreate(BaseModel):
     description: str = Field(min_length=5, max_length=2000)
     reporter_name: str = Field(min_length=1, max_length=120)
     reporter_contact: str = Field(min_length=3, max_length=200)
+
+
+class ReportStatusUpdate(BaseModel):
+    """What the admin sends to change a report's status."""
+
+    # extra="forbid": reject unknown fields with a 422, as in ReportCreate.
+    model_config = ConfigDict(extra="forbid")
+
+    status: ReportStatus
 
 
 class ReportOut(BaseModel):

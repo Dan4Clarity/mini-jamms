@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from psycopg import Connection
 
 from models import ReportCreate
@@ -19,6 +21,24 @@ CREATE_REPORT_SQL = """
               reporter_contact, photo_path, status, created_at
 """
 
+# FOR UPDATE locks the row until the transaction ends, so a concurrent PATCH
+# waits and then sees the new status. Commit only after the update.
+GET_REPORT_SQL = """
+    SELECT id, location, problem_type, description, reporter_name,
+           reporter_contact, photo_path, status, created_at
+    FROM public.reports
+    WHERE id = %(id)s
+    FOR UPDATE
+"""
+
+UPDATE_REPORT_STATUS_SQL = """
+    UPDATE public.reports
+    SET status = %(status)s
+    WHERE id = %(id)s
+    RETURNING id, location, problem_type, description, reporter_name,
+              reporter_contact, photo_path, status, created_at
+"""
+
 
 def list_reports(conn: Connection) -> list[dict]:
     """Return all reports, newest first."""
@@ -34,5 +54,22 @@ def create_report(conn: Connection, data: ReportCreate) -> dict:
         cur.execute(CREATE_REPORT_SQL, data.model_dump())
         row = cur.fetchone()
     # Commit here so the row is durable before the 201 response is built.
+    conn.commit()
+    return row
+
+
+def get_report(conn: Connection, report_id: UUID) -> dict | None:
+    """Return one report and lock its row, or None if no report has that id."""
+    with conn.cursor() as cur:
+        cur.execute(GET_REPORT_SQL, {"id": report_id})
+        return cur.fetchone()
+
+
+def update_report_status(conn: Connection, report_id: UUID, new_status: str) -> dict | None:
+    """Set a report's status and return the updated row, or None if it no longer exists."""
+    with conn.cursor() as cur:
+        cur.execute(UPDATE_REPORT_STATUS_SQL, {"id": report_id, "status": new_status})
+        row = cur.fetchone()
+    # Commit here so the change is durable before the response is built.
     conn.commit()
     return row
