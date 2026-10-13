@@ -19,4 +19,13 @@ export default defineConfig([
       globals: globals.browser,
     },
   },
+  {
+    // shadcn/ui files export a style helper next to the component (for example
+    // buttonVariants). That is how shadcn generates them, so this one rule,
+    // which only affects hot reload during development, is off for that folder.
+    files: ['src/components/ui/**/*.tsx'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
 ])
