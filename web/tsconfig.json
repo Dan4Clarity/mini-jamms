@@ -3,5 +3,12 @@
   "references": [
     { "path": "./tsconfig.app.json" },
     { "path": "./tsconfig.node.json" }
-  ]
+  ],
+  "compilerOptions": {
+    /* Only read by the shadcn CLI, which looks here for the "@/" alias.
+       The setting TypeScript actually uses is in tsconfig.app.json. */
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  }
 }
