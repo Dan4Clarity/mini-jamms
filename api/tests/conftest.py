@@ -9,6 +9,11 @@ from pathlib import Path
 # placeholder: no test connects to a database.
 os.environ.setdefault("DATABASE_URL", "postgresql://unused")
 
+# main.py reads ALLOWED_ORIGINS (the CORS allow-list) when it is imported.
+# Pin it here so the CORS tests get the same answer on every machine, whatever
+# a developer has in their shell or their local .env file.
+os.environ["ALLOWED_ORIGINS"] = "http://localhost:5173"
+
 # The app modules (main.py, rules.py, ...) live in api/, one folder up from
 # this file. Adding api/ to Python's import path makes `import main` work
 # whether pytest is run from api/ or from the repo root.

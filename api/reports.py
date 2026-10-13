@@ -6,37 +6,45 @@ from models import ReportCreate
 
 LIST_REPORTS_SQL = """
     SELECT id, location, problem_type, description, reporter_name,
-           reporter_contact, photo_path, status, created_at
+           reporter_contact, photo_path, status, created_at,
+           user_type, updated_at
     FROM public.reports
     ORDER BY created_at DESC
 """
 
 CREATE_REPORT_SQL = """
     INSERT INTO public.reports
-        (location, problem_type, description, reporter_name, reporter_contact)
+        (location, problem_type, description, reporter_name, reporter_contact,
+         user_type)
     VALUES
         (%(location)s, %(problem_type)s, %(description)s,
-         %(reporter_name)s, %(reporter_contact)s)
+         %(reporter_name)s, %(reporter_contact)s,
+         %(user_type)s)
     RETURNING id, location, problem_type, description, reporter_name,
-              reporter_contact, photo_path, status, created_at
+              reporter_contact, photo_path, status, created_at,
+              user_type, updated_at
 """
 
 # FOR UPDATE locks the row until the transaction ends, so a concurrent PATCH
 # waits and then sees the new status. Commit only after the update.
 GET_REPORT_SQL = """
     SELECT id, location, problem_type, description, reporter_name,
-           reporter_contact, photo_path, status, created_at
+           reporter_contact, photo_path, status, created_at,
+           user_type, updated_at
     FROM public.reports
     WHERE id = %(id)s
     FOR UPDATE
 """
 
+# updated_at is not in the SET list: the reports_set_updated_at_trg trigger
+# sets it, and RETURNING gives back the value the trigger stored.
 UPDATE_REPORT_STATUS_SQL = """
     UPDATE public.reports
     SET status = %(status)s
     WHERE id = %(id)s
     RETURNING id, location, problem_type, description, reporter_name,
-              reporter_contact, photo_path, status, created_at
+              reporter_contact, photo_path, status, created_at,
+              user_type, updated_at
 """
 
 

@@ -1,6 +1,8 @@
+import os
 from uuid import UUID
 
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 
 from db import get_connection
 from models import ReportCreate, ReportOut, ReportStatusUpdate
@@ -8,6 +10,43 @@ from reports import create_report, get_report, list_reports, update_report_statu
 from rules import is_allowed_transition
 
 app = FastAPI(title="Mini-JAMMS API")
+
+
+def parse_allowed_origins(raw: str) -> list[str]:
+    """Split a comma-separated list of origins into a clean list."""
+    # Drop spaces, empty entries (e.g. from a trailing comma) and a trailing
+    # slash: browsers send "https://example.com" with no slash, and the match
+    # is an exact string comparison.
+    origins = [origin.strip().rstrip("/") for origin in raw.split(",")]
+    origins = [origin for origin in origins if origin]
+    # "*" means "every website". Refuse to start, so the mistake is seen at
+    # deploy time instead of silently opening the API.
+    if "*" in origins:
+        raise ValueError("ALLOWED_ORIGINS must list explicit origins, not '*'.")
+    return origins
+
+
+# CORS: the list of websites whose pages a browser will let call this API.
+# An origin is scheme + host + port with no path, e.g. http://localhost:5173
+# (the Vite dev server). Set ALLOWED_ORIGINS to a comma-separated list in
+# production. `or` makes an unset variable and an empty one behave the same:
+# both fall back to the local dev server.
+# This runs after `from db import ...` above, which loads the local .env file.
+ALLOWED_ORIGINS = parse_allowed_origins(
+    os.environ.get("ALLOWED_ORIGINS") or "http://localhost:5173"
+)
+
+# Middleware wraps every request and response. This one answers the browser's
+# preflight OPTIONS requests itself and adds the Access-Control-Allow-* headers
+# to responses for the origins listed above.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
+    # The only non-default header the frontend sends: Content-Type: application/json.
+    allow_headers=["Content-Type"],
+    # allow_credentials is left at its default (False): no login, no cookies.
+)
 
 
 @app.get("/health")
