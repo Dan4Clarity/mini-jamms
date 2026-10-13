@@ -1,0 +1,7 @@
+# Files and folders that are not copied into the Docker image.
+.venv
+.env
+.env.*
+**/__pycache__
+**/*.pyc
+tests
