@@ -8,6 +8,7 @@
 
 import { FIELD_LABELS } from '@/reportValidation'
 import type { FieldName, ReportCreate } from '@/reportValidation'
+import type { ReportStatus } from '@/reportStatuses'
 
 // import.meta.env is how Vite passes settings to the code. Only variables
 // whose name starts with VITE_ are included, and their values are copied into
@@ -105,8 +106,27 @@ export async function postReport(report: ReportCreate): Promise<Report> {
   return (await response.json()) as Report
 }
 
-// GET /reports: every report. Not used by a page yet (for the admin page).
+// GET /reports: every report, newest first. Used by the admin page.
 export async function getReports(): Promise<Report[]> {
   const response = await send('/reports')
   return (await response.json()) as Report[]
+}
+
+// PATCH /reports/{id}: changes one report's status and returns the report as
+// now stored. The body mirrors ReportStatusUpdate in api/models.py.
+//
+// The API decides whether the change is allowed. If it refuses (409 Conflict),
+// or the report is gone (404), or the server cannot be reached, send() throws
+// an Error carrying the message to show, exactly as for the other calls.
+export async function updateReportStatus(
+  id: string,
+  status: ReportStatus,
+): Promise<Report> {
+  // encodeURIComponent makes the id safe to put in a URL, whatever it contains.
+  const response = await send(`/reports/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status }), // {"status": "closed"}
+  })
+  return (await response.json()) as Report
 }
