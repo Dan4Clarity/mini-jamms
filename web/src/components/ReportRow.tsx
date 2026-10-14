@@ -3,6 +3,7 @@ import { flushSync } from 'react-dom'
 import { updateReportStatus } from '@/api'
 import type { Report } from '@/api'
 import { TableCell, TableRow } from '@/components/ui/table'
+import { formatDateTime, REPORTS_TIME_ZONE_LABEL } from '@/reportDates'
 import { REPORT_STATUSES } from '@/reportStatuses'
 import { PROBLEM_TYPES, USER_TYPES } from '@/reportValidation'
 
@@ -11,26 +12,6 @@ import { PROBLEM_TYPES, USER_TYPES } from '@/reportValidation'
 // instead of filling the row. h-11 = 44px tall, comfortable to tap.
 const STATUS_SELECT_CLASS =
   'h-11 w-44 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-60 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 md:text-sm dark:bg-input/30 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40'
-
-// Dates are shown the Australian way (day, month, year), in the time zone of
-// the computer or phone the page is viewed on. Example: "13 Oct 2026, 9:30 am".
-// Intl.DateTimeFormat is built into the browser, so no extra library is needed.
-const DATE_FORMAT = new Intl.DateTimeFormat('en-AU', {
-  day: 'numeric',
-  month: 'short',
-  year: 'numeric',
-  hour: 'numeric',
-  minute: '2-digit',
-  hour12: true,
-})
-
-// Turns the API's date text ("2026-10-13T09:30:00Z") into something readable.
-function formatDate(isoText: string): string {
-  const date = new Date(isoText)
-  // If the text is not a date at all, show it as it came rather than crash.
-  if (Number.isNaN(date.getTime())) return isoText
-  return DATE_FORMAT.format(date)
-}
 
 // Looks up the label for a code, like a join to a lookup table. If the code
 // is not in the list (the API has a value this page does not know about yet),
@@ -63,7 +44,9 @@ export function ReportRow({ report, onUpdated }: ReportRowProps) {
   // page, so it can put the keyboard focus back on it (see handleStatusChange).
   const selectRef = useRef<HTMLSelectElement>(null)
 
-  const created = formatDate(report.created_at)
+  // When the report was made, in the reports' time zone (Eastern Time), not
+  // the viewer's own. Example: "10/13/2026, 7:53 PM". See reportDates.ts.
+  const created = formatDateTime(report.created_at)
   const errorId = `status-error-${report.id}`
   // True if the API sent a status this page does not know (see labelFor).
   const statusIsUnknown = !REPORT_STATUSES.some(
@@ -106,7 +89,8 @@ export function ReportRow({ report, onUpdated }: ReportRowProps) {
   return (
     <TableRow>
       <TableCell>
-        {/* <time> keeps the exact date in a form programs can read. */}
+        {/* <time> keeps the exact date in a form programs can read. The text
+            shown is Eastern Time; the column heading says so. */}
         <time dateTime={report.created_at}>{created}</time>
       </TableCell>
       <TableCell>{labelFor(PROBLEM_TYPES, report.problem_type)}</TableCell>
@@ -128,7 +112,7 @@ export function ReportRow({ report, onUpdated }: ReportRowProps) {
             not this page, decides which changes are allowed. */}
         <select
           ref={selectRef}
-          aria-label={`Status for report at ${report.location}, reported ${created}`}
+          aria-label={`Status for report at ${report.location}, reported ${created} ${REPORTS_TIME_ZONE_LABEL}`}
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? errorId : undefined}
           className={STATUS_SELECT_CLASS}

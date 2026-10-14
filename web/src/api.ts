@@ -77,8 +77,22 @@ async function readErrorMessage(response: Response): Promise<string> {
   return lines.length > 0 ? lines.join('\n') : fallback
 }
 
-// Sends one request and returns the response, or throws an Error whose message
-// can be shown to the person using the page.
+// The error every failed call throws. It is an ordinary Error (so "message" is
+// the text to show the person) with one extra field: the HTTP status code the
+// API answered with, or null when no answer came back at all. The admin page
+// uses it to tell "the API refused these filters" (422) from "the API could
+// not be reached".
+export class ApiError extends Error {
+  status: number | null
+
+  constructor(message: string, status: number | null) {
+    super(message)
+    this.status = status
+  }
+}
+
+// Sends one request and returns the response, or throws an ApiError whose
+// message can be shown to the person using the page.
 async function send(path: string, options?: RequestInit): Promise<Response> {
   let response: Response
   try {
@@ -86,12 +100,14 @@ async function send(path: string, options?: RequestInit): Promise<Response> {
   } catch {
     // fetch only fails like this when no answer came back at all: the API is
     // down, the network dropped, or the browser blocked the call (CORS).
-    throw new Error('Could not reach the server. Please try again.')
+    throw new ApiError('Could not reach the server. Please try again.', null)
   }
 
   // An answer with an error status (4xx, 5xx) does NOT make fetch fail, so it
   // has to be checked. response.ok is true for 200 to 299.
-  if (!response.ok) throw new Error(await readErrorMessage(response))
+  if (!response.ok) {
+    throw new ApiError(await readErrorMessage(response), response.status)
+  }
 
   return response
 }
@@ -106,9 +122,37 @@ export async function postReport(report: ReportCreate): Promise<Report> {
   return (await response.json()) as Report
 }
 
-// GET /reports: every report, newest first. Used by the admin page.
-export async function getReports(): Promise<Report[]> {
-  const response = await send('/reports')
+// The optional filters for GET /reports. Each one may be left out, and an
+// empty string '' (what an empty drop-down or date box holds) also means
+// "no filter". The dates are text in the form YYYY-MM-DD, which is exactly
+// what <input type="date"> gives and what the API expects.
+export type ReportFilters = {
+  status?: ReportStatus | ''
+  dateFrom?: string
+  dateTo?: string
+}
+
+// GET /reports: the reports, newest first. Used by the admin page.
+//
+// With no filters this asks for plain /reports, which returns every report.
+// Each filter that is set adds one query parameter, for example
+// /reports?status=open&date_from=2026-10-01&date_to=2026-10-13. The API does
+// the filtering (like a WHERE clause); this only passes the values on.
+export async function getReports(
+  filters: ReportFilters = {},
+): Promise<Report[]> {
+  // URLSearchParams builds the "name=value&name=value" text and encodes the
+  // values, so nothing typed into a filter can break the URL.
+  const params = new URLSearchParams()
+  // A filter that is not set is left out altogether. Sending "status=" with
+  // nothing after it would be refused by the API (422), because an empty
+  // string is not one of the statuses.
+  if (filters.status) params.set('status', filters.status)
+  if (filters.dateFrom) params.set('date_from', filters.dateFrom)
+  if (filters.dateTo) params.set('date_to', filters.dateTo)
+
+  const query = params.toString() // '' when no filter is set
+  const response = await send(query ? `/reports?${query}` : '/reports')
   return (await response.json()) as Report[]
 }
 

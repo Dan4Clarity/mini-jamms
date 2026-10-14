@@ -1,11 +1,12 @@
 import os
+from datetime import date
 from uuid import UUID
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from db import get_connection
-from models import ReportCreate, ReportOut, ReportStatusUpdate
+from models import ReportCreate, ReportOut, ReportStatus, ReportStatusUpdate
 from reports import create_report, get_report, list_reports, update_report_status
 from rules import is_allowed_transition
 
@@ -61,9 +62,24 @@ def health_db(conn=Depends(get_connection)):
         return cur.fetchone()
 
 
+# Parameters that are not part of the path are read from the query string,
+# e.g. GET /reports?status=open&date_from=2026-10-01. "X | None = None" means
+# "an X, or nothing; nothing if left out", which is what makes each one optional.
+# FastAPI converts the text using the type hint: status must be one of the
+# ReportStatus codes and the dates must be real YYYY-MM-DD dates. Anything else
+# gets a 422 before this function is called.
 @app.get("/reports", response_model=list[ReportOut])
-def get_reports(conn=Depends(get_connection)):
-    return list_reports(conn)
+def get_reports(
+    status: ReportStatus | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    conn=Depends(get_connection),
+):
+    if date_from is not None and date_to is not None and date_from > date_to:
+        raise HTTPException(
+            status_code=422, detail="The From date must not be later than the To date."
+        )
+    return list_reports(conn, status, date_from, date_to)
 
 
 @app.post("/reports", response_model=ReportOut, status_code=201)
