@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
 import { ApiError, getReports } from '@/api'
 import type { Report } from '@/api'
+import { ErrorBox } from '@/components/ErrorBox'
 import { FilterBar } from '@/components/FilterBar'
+import { PageLayout } from '@/components/PageLayout'
+import { Pagination } from '@/components/Pagination'
 import { ReportRow } from '@/components/ReportRow'
 import { Button } from '@/components/ui/button'
 import {
@@ -20,14 +23,19 @@ import {
   NO_FILTERS,
 } from '@/reportFilters'
 import type { FilterValues } from '@/reportFilters'
+import { describeCount, pageSlice } from '@/reportPages'
 
-// The rows on screen, kept together with the filters that produced them. They
-// are stored as one value so the two can never get out of step: the count and
-// the summary above the table are always worked out from this pair, never from
-// whatever the filter controls happen to show at the moment.
+// The list the API sent, kept together with the filters that produced it and
+// the page of it being shown. They are stored as one value so they can never
+// get out of step: the count, the summary and the page number around the table
+// are always worked out from this one value, never from whatever the filter
+// controls happen to show at the moment.
 type LoadedReports = {
   reports: Report[]
   filters: FilterValues
+  // Which page of "reports" the table shows, counting from 1. Every newly
+  // loaded list starts at page 1.
+  page: number
 }
 
 // Why the latest load failed.
@@ -84,7 +92,12 @@ export function AdminPage() {
     getReports(filters).then(
       (reports) => {
         if (ignore) return
-        setLoaded({ reports, filters })
+        // A new list always starts at page 1. This is what takes the table
+        // back to page 1 when a filter changes (or is cleared): the old list
+        // stays on screen, on the page it was on, until the new one arrives,
+        // and then the rows, the filters and the page number are all replaced
+        // in this one step.
+        setLoaded({ reports, filters, page: 1 })
         setFailure(null)
         setRefetching(false)
       },
@@ -143,43 +156,62 @@ export function AdminPage() {
     )
   }
 
-  // Worked out from the rows on screen and the filters that produced them.
-  const count = loaded?.reports.length ?? 0
+  // Previous or Next was pressed (see Pagination.tsx). Only the page number
+  // changes: nothing is asked of the API.
+  function handlePageChange(page: number) {
+    setLoaded((current) => current && { ...current, page })
+  }
+
+  // CLIENT-SIDE PAGINATION, a deliberate proof-of-concept simplification: the
+  // API returns every matching report and the browser shows 20 (PAGE_SIZE) of
+  // them at a time. Production would page in the query instead, with LIMIT and
+  // OFFSET, and COUNT(*) OVER () for the total.
+  //
+  // Everything here is worked out again on every re-draw from the loaded list
+  // and its page number; none of it is stored. pageSlice (reportPages.ts) also
+  // pulls the page number back into range, so the table can never show an
+  // empty page while rows exist.
+  const total = loaded?.reports.length ?? 0
+  const slice = pageSlice(total, loaded?.page ?? 1)
+  // slice(start, end) copies that run of rows, like OFFSET start with a LIMIT.
+  // The rows keep the order the API sent them in.
+  const visibleReports = loaded?.reports.slice(slice.start, slice.end) ?? []
   const summary = loaded ? describeFilters(loaded.filters) : null
 
   return (
-    // max-w-6xl lets the table use a wide screen; mx-auto centres the column.
-    // px-4 / py-6 = padding on a phone; sm: applies from tablet width up.
-    <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:py-10">
-      <h1 className="mb-6 text-2xl font-semibold">Reports</h1>
+    // PageLayout adds the shared header and footer around the page. "wide"
+    // lets the heading, the filters and the table use a wide screen.
+    <PageLayout navTo="/" navLabel="Report a problem" width="wide">
+      {/* text-3xl on a phone, a size larger from tablet width up (sm:). */}
+      <h1 className="mb-6 text-3xl sm:mb-8 sm:text-4xl">Reports</h1>
 
       {/* Before the first list has loaded, one of the next two blocks is
           shown. After that, the filters and the list are shown instead. */}
 
       {/* role="status" asks screen readers to read this out when it appears. */}
       {loaded === null && failure === null && (
-        <p role="status" className="text-base text-muted-foreground">
+        <p role="status" className="text-muted-foreground">
           Loading reports…
         </p>
       )}
 
-      {/* role="alert" makes screen readers read it out at once. */}
+      {/* ErrorBox is the red box; it has role="alert", which makes screen
+          readers read it out at once. */}
       {loaded === null && failure !== null && (
-        <div
-          role="alert"
-          className="flex flex-col gap-3 rounded-lg border border-destructive p-3 text-base text-destructive"
-        >
-          <p className="font-medium">The reports could not be loaded.</p>
+        <ErrorBox>
+          <p className="font-semibold">The reports could not be loaded.</p>
           <p className="whitespace-pre-line">{failure.message}</p>
+          {/* mt-2 = a little more space above the button; self-start stops
+              it stretching to the full width of the box. */}
           <Button
             type="button"
             variant="outline"
-            className="h-11 self-start px-6 text-base text-foreground"
+            className="mt-2 self-start"
             onClick={handleTryAgain}
           >
             Try again
           </Button>
-        </div>
+        </ErrorBox>
       )}
 
       {loaded !== null && (
@@ -194,12 +226,14 @@ export function AdminPage() {
             onRetry={handleTryAgain}
           />
 
-          {/* The count, and which filters the rows below came from. While a
-              new list is on its way the old rows stay on screen and
-              "Loading…" is added here. role="status" asks screen readers to
-              read the line out when it changes. */}
-          <p role="status" className="mb-4 text-base">
-            Showing {count} {count === 1 ? 'report' : 'reports'}
+          {/* The count ("Showing 21-40 of 47 reports", or "Showing 4 reports"
+              when there is only one page), and which filters the rows below
+              came from. While a new list is on its way the old rows stay on
+              screen and "Loading…" is added here. role="status" asks screen
+              readers to read the line out when it changes, which now includes
+              moving to another page. */}
+          <p role="status" className="mb-4">
+            {describeCount(total, slice)}
             {summary !== null && `: ${summary}`}.
             {refetching && (
               <span className="text-muted-foreground"> Loading…</span>
@@ -207,7 +241,7 @@ export function AdminPage() {
           </p>
 
           {loaded.reports.length === 0 && (
-            <p className="text-base text-muted-foreground">
+            <p className="text-muted-foreground">
               {hasFilters(loaded.filters)
                 ? 'No reports match these filters.'
                 : 'No reports yet.'}
@@ -218,10 +252,13 @@ export function AdminPage() {
             // Table (ui/table.tsx) wraps the <table> in a box that scrolls
             // sideways on its own (overflow-x-auto), so on a phone the table
             // scrolls inside the box instead of making the whole page wider.
+            // The table's look (navy heading row, lines between rows) is set
+            // in ui/table.tsx.
             <Table>
               {/* The caption names the table for screen readers. caption-top
-                  puts it above the table. */}
-              <TableCaption className="mt-0 mb-2 caption-top text-left">
+                  puts it above the heading row; px-3 py-3 = padding inside
+                  the table's outline. */}
+              <TableCaption className="mt-0 caption-top px-3 py-3 text-left">
                 Newest first. Change a report&apos;s status with the list in
                 its row.
               </TableCaption>
@@ -239,10 +276,12 @@ export function AdminPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {/* One ReportRow per report. "key" tells React which row is
-                    which (like a primary key), so each row keeps its own
-                    state. */}
-                {loaded.reports.map((report) => (
+                {/* One ReportRow per report on this page. "key" tells React
+                    which row is which (like a primary key), so each row keeps
+                    its own state while it is on screen. Moving to another
+                    page removes this page's rows, so a row's error message
+                    is gone if the person comes back to it. */}
+                {visibleReports.map((report) => (
                   <ReportRow
                     key={report.id}
                     report={report}
@@ -252,8 +291,16 @@ export function AdminPage() {
               </TableBody>
             </Table>
           )}
+
+          {/* Previous / "Page 2 of 3" / Next. Draws nothing when there is
+              only one page. */}
+          <Pagination
+            page={slice.page}
+            pageCount={slice.pageCount}
+            onPageChange={handlePageChange}
+          />
         </>
       )}
-    </main>
+    </PageLayout>
   )
 }

@@ -3,7 +3,9 @@ import type { FormEvent } from 'react'
 import { flushSync } from 'react-dom'
 import { postReport } from '@/api'
 import type { Report } from '@/api'
+import { ErrorBox } from '@/components/ErrorBox'
 import { FormField } from '@/components/FormField'
+import { NativeSelect } from '@/components/NativeSelect'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -33,13 +35,10 @@ const HINTS: Partial<Record<FieldName, string>> = {
   reporter_contact: 'Email or phone',
 }
 
-// The look of both drop-down lists. The classes copy Input (ui/input.tsx):
-// same border, corners, focus ring and red outline when invalid.
-const SELECT_CLASS =
-  'h-11 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 md:text-sm dark:bg-input/30 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40'
-
-// Tailwind sizes used below: h-11 / min-h-11 = 44px tall, a comfortable size
-// to tap on a phone. text-base = 16px, which also stops iPhones zooming in.
+// Tailwind sizes used below: h-11 = 44px tall, a comfortable size to tap on a
+// phone. The inputs' text is 16px (text-base, set in ui/input.tsx,
+// ui/textarea.tsx and NativeSelect.tsx), which also stops iPhones zooming in.
+// The buttons get their look, and their 44px height, from ui/button.tsx.
 
 export function ReportForm() {
   // useState holds data that can change. Calling the "set" function stores the
@@ -154,28 +153,34 @@ export function ReportForm() {
   if (sentReport) {
     return (
       // role="status" asks screen readers to read this out when it appears.
-      <div role="status" className="flex flex-col gap-4">
+      // A pale sage box: bg-sage/10 = the theme's sage at 10% strength.
+      <div
+        role="status"
+        className="flex flex-col gap-4 rounded-xl border border-sage bg-sage/10 p-5 sm:p-8"
+      >
         {/* tabIndex={-1} lets the code above move focus here, without adding
             the heading to the Tab key order. */}
         <h2
           id="report-sent"
           tabIndex={-1}
-          className="text-xl font-semibold outline-none"
+          className="text-2xl outline-none"
         >
           Thank you. Your report has been sent.
         </h2>
-        <p className="text-base">
+        <p>
           Your reference number is:
           {/* break-all lets the long reference wrap on a narrow phone. */}
-          <span className="mt-1 block font-mono break-all">{sentReport.id}</span>
+          <span className="mt-2 block rounded-lg border bg-background px-3 py-2 font-mono text-base break-all">
+            {sentReport.id}
+          </span>
         </p>
-        <p className="text-base text-muted-foreground">
+        <p className="text-muted-foreground">
           Keep a note of it in case you need to ask about this report.
         </p>
         <Button
           type="button"
           variant="outline"
-          className="h-11 w-full text-base sm:w-auto sm:self-start sm:px-6"
+          className="w-full sm:w-auto sm:self-start"
           onClick={handleReportAnother}
         >
           Report another problem
@@ -193,14 +198,14 @@ export function ReportForm() {
 
   return (
     // noValidate turns off the browser's own pop-up messages; ours are used instead.
-    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-6">
+    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-7">
       <FormField label={FIELD_LABELS.user_type} {...userType.row}>
         {/* The browser's own drop-down list. No empty placeholder option:
             "Member of the public" is already chosen. */}
-        <select
+        <NativeSelect
           {...userType.input}
           required
-          className={SELECT_CLASS}
+          className="w-full"
           value={values.user_type}
           onChange={(event) => setValue('user_type', event.target.value)}
           onBlur={() => markTouched('user_type')}
@@ -210,7 +215,7 @@ export function ReportForm() {
               {option.label}
             </option>
           ))}
-        </select>
+        </NativeSelect>
       </FormField>
 
       <FormField label={FIELD_LABELS.location} {...location.row}>
@@ -231,10 +236,10 @@ export function ReportForm() {
       <FormField label={FIELD_LABELS.problem_type} {...problemType.row}>
         {/* The browser's own drop-down list, controlled the same way as the
             text inputs. */}
-        <select
+        <NativeSelect
           {...problemType.input}
           required
-          className={SELECT_CLASS}
+          className="w-full"
           value={values.problem_type}
           onChange={(event) => setValue('problem_type', event.target.value)}
           onBlur={() => markTouched('problem_type')}
@@ -249,14 +254,14 @@ export function ReportForm() {
               {option.label}
             </option>
           ))}
-        </select>
+        </NativeSelect>
       </FormField>
 
       <FormField label={FIELD_LABELS.description} {...description.row}>
         <Textarea
           {...description.input}
           required
-          className="min-h-28"
+          className="min-h-32"
           value={values.description}
           onChange={(event) => setValue('description', event.target.value)}
           onBlur={() => markTouched('description')}
@@ -288,25 +293,24 @@ export function ReportForm() {
         />
       </FormField>
 
-      {/* w-full on a phone; sm:w-auto shrinks it to fit its text on wider screens. */}
       {/* Shown just above the button if the API refused the report or could
-          not be reached. role="alert" makes screen readers read it out at
-          once. whitespace-pre-line keeps each problem on its own line. */}
+          not be reached. ErrorBox is the red box; it has role="alert", which
+          makes screen readers read it out at once. whitespace-pre-line keeps
+          each problem on its own line. */}
       {serverError && (
-        <div
-          role="alert"
-          className="rounded-lg border border-destructive p-3 text-base text-destructive"
-        >
-          <p className="font-medium">Sorry, your report was not sent.</p>
+        <ErrorBox>
+          <p className="font-semibold">Sorry, your report was not sent.</p>
           <p className="whitespace-pre-line">{serverError}</p>
-        </div>
+        </ErrorBox>
       )}
 
-      {/* disabled while sending, so a second press cannot send it twice. */}
+      {/* disabled while sending, so a second press cannot send it twice.
+          w-full on a phone; sm:w-auto shrinks it to fit its text on wider
+          screens. */}
       <Button
         type="submit"
         disabled={sending}
-        className="h-11 w-full text-base sm:w-auto sm:self-start sm:px-6"
+        className="w-full sm:w-auto sm:self-start"
       >
         {sending ? 'Sending…' : 'Send report'}
       </Button>

@@ -19,17 +19,17 @@ export function FormField({ id, label, hint, error, children }: FormFieldProps) 
   return (
     // flex flex-col = stack the children vertically; gap-2 = space between them.
     <div className="flex flex-col gap-2">
-      <Label htmlFor={id} className="text-base">
+      <Label htmlFor={id} className="text-base font-semibold">
         {label}
       </Label>
       {hint && (
-        <p id={`${id}-hint`} className="text-sm text-muted-foreground">
+        <p id={`${id}-hint`} className="text-base text-muted-foreground">
           {hint}
         </p>
       )}
       {children}
       {error && (
-        <p id={`${id}-error`} className="text-sm font-medium text-destructive">
+        <p id={`${id}-error`} className="text-base font-medium text-destructive">
           {error}
         </p>
       )}
