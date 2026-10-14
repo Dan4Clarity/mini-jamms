@@ -16,6 +16,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { REPORTS_TIME_ZONE_LABEL } from '@/reportDates'
+import { downloadCsv } from '@/reportExport'
 import {
   describeFilters,
   hasFilters,
@@ -60,6 +61,11 @@ export function AdminPage() {
   // How many times "Try again" has been pressed. Changing it re-runs the
   // effect below, which loads the list again.
   const [attempt, setAttempt] = useState(0)
+  // True from pressing "Download PDF" until the file has been handed to the
+  // browser (or has failed).
+  const [pdfPreparing, setPdfPreparing] = useState(false)
+  // Set if the last download could not be made, otherwise null.
+  const [downloadError, setDownloadError] = useState<string | null>(null)
 
   // useEffect runs code AFTER React has drawn the component. It is for work
   // that reaches outside the page, here asking the API for the reports.
@@ -162,6 +168,54 @@ export function AdminPage() {
     setLoaded((current) => current && { ...current, page })
   }
 
+  // THE DOWNLOADS. Both export "loaded.reports": the WHOLE list the API sent
+  // for "loaded.filters", not only the 20 rows on the current page, in the
+  // order shown and including any status changes already swapped in above.
+  // That is exactly the set of rows the count line above the table describes.
+  // They never use "filters" (what the controls show), which can be ahead of
+  // the list while a new one is on its way or after a load has failed. So
+  // while "Loading…" is showing, a download still gives the rows on screen.
+  // Nothing is asked of the API.
+
+  // "Download CSV" was pressed. Building the text is quick, so there is
+  // nothing to wait for (see reportExport.ts).
+  function handleDownloadCsv() {
+    if (loaded === null || loaded.reports.length === 0) return
+    setDownloadError(null)
+    downloadCsv(loaded.reports)
+  }
+
+  // "Download PDF" was pressed.
+  //
+  // import('@/reportPdf') is a DYNAMIC import: instead of being part of the
+  // JavaScript everyone downloads with the page, reportPdf.ts and the PDF
+  // library it uses are fetched now, the first time the button is pressed
+  // (after that the browser already has them). Like fetch(), it returns a
+  // Promise, so "await" waits for the code to arrive. It fails if the code
+  // cannot be fetched, for example when the connection has dropped.
+  async function handleDownloadPdf() {
+    // Ignore a press while one is already being prepared, and with no rows.
+    if (pdfPreparing || loaded === null || loaded.reports.length === 0) return
+    setPdfPreparing(true)
+    setDownloadError(null)
+    try {
+      const { downloadPdf } = await import('@/reportPdf')
+      // "loaded" here is still the list that was on screen when the button
+      // was pressed, even if a new list has arrived while waiting.
+      downloadPdf(loaded.reports, loaded.filters)
+    } catch {
+      // Pressing the button again asks for the code again in some browsers.
+      // Chrome does not: once fetching a piece of code has failed, it gives
+      // the same failure, without asking the network, until the page is
+      // reloaded. That is why the message mentions reloading.
+      setDownloadError(
+        'The PDF could not be prepared. Check your connection and try again. If it still fails, reload the page.',
+      )
+    } finally {
+      setPdfPreparing(false)
+    }
+  }
+
   // CLIENT-SIDE PAGINATION, a deliberate proof-of-concept simplification: the
   // API returns every matching report and the browser shows 20 (PAGE_SIZE) of
   // them at a time. Production would page in the query instead, with LIMIT and
@@ -217,13 +271,19 @@ export function AdminPage() {
       {loaded !== null && (
         <>
           {/* If a load with new filters fails, the message goes in the filter
-              bar and the rows below stay as they were. */}
+              bar and the rows below stay as they were. The bar also holds the
+              two download buttons, disabled when there are no rows. */}
           <FilterBar
             filters={filters}
             onChange={handleFiltersChange}
             error={failure?.message ?? null}
             rejected={failure?.rejected ?? false}
             onRetry={handleTryAgain}
+            onDownloadCsv={handleDownloadCsv}
+            onDownloadPdf={handleDownloadPdf}
+            downloadDisabled={loaded.reports.length === 0}
+            pdfPreparing={pdfPreparing}
+            downloadError={downloadError}
           />
 
           {/* The count ("Showing 21-40 of 47 reports", or "Showing 4 reports"

@@ -7,6 +7,7 @@ import { NativeSelect } from '@/components/NativeSelect'
 import { TableCell, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 import { formatDateTime, REPORTS_TIME_ZONE_LABEL } from '@/reportDates'
+import { labelFor } from '@/reportLabels'
 import { REPORT_STATUSES } from '@/reportStatuses'
 import { PROBLEM_TYPES, USER_TYPES } from '@/reportValidation'
 import { statusLook } from '@/statusLooks'
@@ -41,16 +42,6 @@ const STATUS_SELECT_CLASS =
 // example white text on navy for every entry of a "Closed" row.
 const OPTION_CLASS = 'bg-background text-foreground'
 
-// Looks up the label for a code, like a join to a lookup table. If the code
-// is not in the list (the API has a value this page does not know about yet),
-// the code itself is shown, so the cell is never blank.
-function labelFor(
-  options: { value: string; label: string }[],
-  code: string,
-): string {
-  return options.find((option) => option.value === code)?.label ?? code
-}
-
 // "Props" are the inputs to a component, like parameters to a function.
 type ReportRowProps = {
   report: Report
@@ -77,7 +68,8 @@ export function ReportRow({ report, onUpdated }: ReportRowProps) {
   // the viewer's own. Example: "10/13/2026, 7:53 PM". See reportDates.ts.
   const created = formatDateTime(report.created_at)
   const errorId = `status-error-${report.id}`
-  // True if the API sent a status this page does not know (see labelFor).
+  // True if the API sent a status this page does not know (see labelFor in
+  // reportLabels.ts).
   const statusIsUnknown = !REPORT_STATUSES.some(
     (option) => option.value === report.status,
   )
